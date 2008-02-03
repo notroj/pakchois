@@ -1,0 +1,5 @@
+pakchois is yet-another PKCS#11 wrapper library.
+
+libp11 depends on OpenSSL, which sucks.
+pkcs11-helper hides the real PKCS#11 API.
+pakchois doesn't do either of the above.
