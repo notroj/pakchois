@@ -1,5 +1,35 @@
-pakchois is yet-another PKCS#11 wrapper library.
 
-libp11 depends on OpenSSL, which sucks.
-pkcs11-helper hides the real PKCS#11 API.
-pakchois doesn't do either of the above.
+Introduction
+============
+
+pakchois is yet-another PKCS#11 wrapper library.  pakchois provides a
+very thin wrapper over the PKCS#11 interface.
+
+The goals are:
+
+1) to offer a modern* object-oriented C interface based on PKCS#11.
+
+2) to not hide or abstract away any details of the PKCS#11 interface
+itself except where absolutely necessary.
+
+3) to handle the details of loading DSOs
+
+4) to allow the caller to avoid caring about where on the system
+PKCS#11 modules might be stored, or how they are named.
+
+5) to avoid any dependency on a particular cryptography toolkit.
+
+Existing equivalent solutions differ in at least one of the above
+goals.
+
+*: "modern" being a euphemism for "not crap"; i.e. no global state,
+ sane symbol namespace, etc etc.
+
+
+Etymology
+=========
+
+"pakchois" is prounounced like the vegetable, "Pak Choi", with a
+silent "s"; the word is pluralized only to make the acronym fit;
+PaKChoiS, geddit?  In this way the time-honoured tradition of naming
+projects by grepping /usr/{share/,}dict/words is continued.

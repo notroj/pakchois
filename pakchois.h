@@ -19,56 +19,96 @@
 
 */
 
+/*
+  This interface is directly derived from the scute.org PKCS#11
+  cryptoki interface, which is:
+
+   Copyright 2006, 2007 g10 Code GmbH
+   Copyright 2006 Andreas Jellinghaus
+
+   This file is free software; as a special exception the author gives
+   unlimited permission to copy and/or distribute it, with or without
+   modifications, as long as this notice is preserved.
+
+   This file is distributed in the hope that it will be useful, but
+   WITHOUT ANY WARRANTY, to the extent permitted by law; without even
+   the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR
+   PURPOSE.
+*/
+
 #ifndef PAKCHOIS_H
 #define PAKCHOIS_H
 
 #define CRYPTOKI_GNU
 
-#include "pkcs11.h"
+#include "pakchois11.h"
 
-typedef struct pakchois_context_s pakchois_context_t;
+typedef struct pakchois_module_s pakchois_module_t;
 typedef struct pakchois_session_s pakchois_session_t;
 typedef struct pakchois_object_s pakchois_object_t;
 
-pakchois_context_t *pakchois_context_create(const char *module);
+/* Load a PKCS#11 module by name (for example "opensc" or
+ * "gnome-keyring").  Returns NULL if the module was not found or
+ * could not be loaded. */
+pakchois_module_t *pakchois_module_load(const char *module);
 
-void pakchois_context_destroy(pakchois_context_t *ctx);
+/* Destroy a PKCS#11 module. */
+void pakchois_module_destroy(pakchois_module_t *module);
 
+/* All following interfaces model the PKCS#11 equivalents, without the
+   camel-cased naming convention.  The PKCS#11 specification has
+   detailed interface descriptions:
+   
+      http://www.rsa.com/rsalabs/node.asp?id=2133
 
+   The differences between this interface and PKCS#11 are:
+   
+   1. some interfaces take a module object pointer as first argument
 
-ck_rv_t pakchois_get_info(pakchois_context_t *ctx, struct ck_info *info);
+   2. session and object handlers are represented as opaque
+      objects,
 
-ck_rv_t pakchois_get_function_list(pakchois_context_t *ctx,
-				   struct ck_function_list **function_list);
+   3. the notify callback type has changed accordingly,
 
-ck_rv_t pakchois_get_slot_list(pakchois_context_t *ctx,
+   4. the C_Initialize, C_Finalize, and C_GetFunctionList interfaces
+   are not exposed (these are called internally by
+   pakchois_module_load and pakchois_module_destroy).
+
+*/
+
+ck_session_handle_t pakchois_session_handle(pakchois_session_t *sess);
+ck_object_handle_t pakchois_object_handle(pakchois_object_t *obj);
+
+ck_rv_t pakchois_get_info(pakchois_module_t *module, struct ck_info *info);
+
+ck_rv_t pakchois_get_slot_list(pakchois_module_t *module,
 			       unsigned char token_present,
 			       ck_slot_id_t *slot_list,
 			       unsigned long *count);
 
-ck_rv_t pakchois_get_slot_info(pakchois_context_t *ctx,
+ck_rv_t pakchois_get_slot_info(pakchois_module_t *module,
 			       ck_slot_id_t slot_id,
 			       struct ck_slot_info *info);
 
-ck_rv_t pakchois_get_token_info(pakchois_context_t *ctx,
+ck_rv_t pakchois_get_token_info(pakchois_module_t *module,
 				ck_slot_id_t slot_id,
 				struct ck_token_info *info);
 
-ck_rv_t pakchois_wait_for_slot_event(pakchois_context_t *ctx,
+ck_rv_t pakchois_wait_for_slot_event(pakchois_module_t *module,
 				     ck_flags_t flags, ck_slot_id_t *slot,
 				     void *reserved);
 
-ck_rv_t pakchois_get_mechanism_list(pakchois_context_t *ctx,
+ck_rv_t pakchois_get_mechanism_list(pakchois_module_t *module,
 				    ck_slot_id_t slot_id,
 				    ck_mechanism_type_t *mechanism_list,
 				    unsigned long *count);
 
-ck_rv_t pakchois_get_mechanism_info(pakchois_context_t *ctx,
+ck_rv_t pakchois_get_mechanism_info(pakchois_module_t *module,
 				    ck_slot_id_t slot_id,
 				    ck_mechanism_type_t type,
 				    struct ck_mechanism_info *info);
 
-ck_rv_t pakchois_init_token(pakchois_context_t *ctx,
+ck_rv_t pakchois_init_token(pakchois_module_t *module,
 			    ck_slot_id_t slot_id, unsigned char *pin,
 			    unsigned long pin_len, unsigned char *label);
 
@@ -79,19 +119,22 @@ ck_rv_t pakchois_set_pin(pakchois_session_t *session, unsigned char *old_pin,
 			 unsigned long old_len, unsigned char *new_pin,
 			 unsigned long new_len);
 
-ck_rv_t pakchois_open_session(pakchois_context_t *ctx,
+typedef ck_rv_t (*pakchois_notify_t) (pakchois_session_t *sess,
+                                      ck_notification_t event,
+                                      void *application);
+
+ck_rv_t pakchois_open_session(pakchois_module_t *module,
 			      ck_slot_id_t slot_id, ck_flags_t flags,
-			      void *application, ck_notify_t notify,
+			      void *application, pakchois_notify_t notify,
 			      pakchois_session_t **session);
 
 ck_rv_t pakchois_close_session(pakchois_session_t *session);
 
-ck_rv_t pakchois_close_all_sessions(pakchois_context_t *ctx,
+ck_rv_t pakchois_close_all_sessions(pakchois_module_t *module,
 				    ck_slot_id_t slot_id);
 
 ck_rv_t pakchois_get_session_info(pakchois_session_t *session,
 				  struct ck_session_info *info);
-
 ck_rv_t pakchois_get_operation_state(pakchois_session_t *session,
 				     unsigned char *operation_state,
 				     unsigned long *operation_state_len);
@@ -100,6 +143,7 @@ ck_rv_t pakchois_set_operation_state(pakchois_session_t *session,
 				     unsigned long operation_state_len,
 				     pakchois_object_t *encryption_key,
 				     pakchois_object_t *authentiation_key);
+
 ck_rv_t pakchois_login(pakchois_session_t *session, ck_user_type_t user_type,
 		       unsigned char *pin, unsigned long pin_len);
 ck_rv_t pakchois_logout(pakchois_session_t *session);
@@ -117,6 +161,7 @@ ck_rv_t pakchois_destroy_object(pakchois_session_t *session,
 ck_rv_t pakchois_get_object_size(pakchois_session_t *session,
 				 pakchois_object_t *object,
 				 unsigned long *size);
+
 ck_rv_t pakchois_get_attribute_value(pakchois_session_t *session,
 				     pakchois_object_t *object,
 				     struct ck_attribute *templ,
@@ -163,7 +208,6 @@ ck_rv_t pakchois_decrypt_update(pakchois_session_t *session,
 ck_rv_t pakchois_decrypt_final(pakchois_session_t *session,
 			       unsigned char *last_part,
 			       unsigned long *last_part_len);
-
 ck_rv_t pakchois_digest_init(pakchois_session_t *session,
 			     struct ck_mechanism *mechanism);
 ck_rv_t pakchois_digest(pakchois_session_t *session, unsigned char *data,
@@ -248,6 +292,7 @@ ck_rv_t pakchois_generate_key_pair(pakchois_session_t *session,
 				   unsigned long private_key_attribute_count,
 				   pakchois_object_t **public_key,
 				   pakchois_object_t **private_key);
+
 ck_rv_t pakchois_wrap_key(pakchois_session_t *session,
 			  struct ck_mechanism *mechanism,
 			  pakchois_object_t *wrapping_key,
