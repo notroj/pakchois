@@ -36,6 +36,8 @@
    PURPOSE.
 */
 
+#include "config.h"
+
 #include <dlfcn.h>
 #include <limits.h>
 #include <stdlib.h>
@@ -53,21 +55,18 @@ struct pakchois_module_s {
 struct pakchois_session_s {
     pakchois_module_t *context;
     ck_session_handle_t id;
-    pakchois_session_t *next; /* linked list. */
     pakchois_notify_t notify;
     void *notify_data;
+    /* Doubly-linked list.  Either prevref = &previous->next or else
+     * prevref = &slot->sessions for the list head. */
+    pakchois_session_t **prevref;
+    pakchois_session_t *next;
 };
-    
+
 struct slot {
     ck_slot_id_t id;
     pakchois_session_t *sessions;
     struct slot *next;
-};
-
-static const char *location_list[] = {
-    "/usr/lib64/pkcs11",
-    "/home/jorton/.pkcs11",
-    NULL
 };
 
 static const char *suffix_prefixes[][2] = {
@@ -89,14 +88,27 @@ static const char *suffix_prefixes[][2] = {
 
 static void *find_pkcs11_module(const char *name)
 {
-    char path[PATH_MAX];
-    unsigned i, j;
-    void *h;
+    char module_path[] = PAKCHOIS_MODPATH;
+    char *next = module_path;
     
-    for (i = 0; location_list[i]; i++) {
-        for (j = 0; suffix_prefixes[j][0]; j++) {
-            snprintf(path, sizeof path, "%s/%s%s%s", location_list[i],
-                     suffix_prefixes[j][0], name, suffix_prefixes[j][1]);
+    while (next) {
+        char *dir = next, *sep = strchr(next, ':');
+        unsigned i;
+
+        if (sep) { 
+            *sep++ = '\0';
+            next = sep;
+        }
+        else {
+            next = NULL;
+        }
+
+        for (i = 0; suffix_prefixes[i][0]; i++) {
+            char path[PATH_MAX];
+            void *h;
+            
+            snprintf(path, sizeof path, "%s/%s%s%s", dir,
+                     suffix_prefixes[i][0], name, suffix_prefixes[i][1]);
 
             h = dlopen(path, RTLD_LOCAL|RTLD_NOW);
             if (h != NULL)
@@ -284,9 +296,9 @@ static struct slot *find_or_create_slot(pakchois_module_t *ctx,
     slot->id = id;
     slot->sessions = NULL;
     slot->next = ctx->slots;
-    ctx->slots = NULL;
+    ctx->slots = slot;
 
-    return slot;    
+    return slot;
 }
 
 static void insert_session(pakchois_module_t *ctx,
@@ -294,8 +306,12 @@ static void insert_session(pakchois_module_t *ctx,
                            ck_slot_id_t id)
 {
     struct slot *slot = find_or_create_slot(ctx, id);
-
+    
+    session->prevref = &slot->sessions;
     session->next = slot->sessions;
+    if (session->next) {
+        session->next->prevref = session->prevref;
+    }
     slot->sessions = session;
 }
 
@@ -328,6 +344,10 @@ ck_rv_t pakchois_close_session(pakchois_session_t *sess)
     /* PKCS#11 says that all bets are off on failure, so destroy the
      * session object and just return the error code. */
     ck_rv_t rv = CALLS(CloseSession, (sess->id));
+    *sess->prevref = sess->next;
+    if (sess->next) {
+        sess->next->prevref = sess->prevref;
+    }
     free(sess);
     return rv;
 }
@@ -341,10 +361,13 @@ ck_rv_t pakchois_close_all_sessions(pakchois_module_t *ctx,
     ck_rv_t rv = CALL(CloseAllSessions, (slot_id));
 
     slot = find_slot(ctx, slot_id);
-    
-    for (sess = slot->sessions; sess; sess = next) {
-        next = sess->next;
-        free(sess);
+
+    if (slot) {
+        for (sess = slot->sessions; sess; sess = next) {
+            next = sess->next;
+            free(sess);
+        }
+        slot->sessions = NULL;
     }
 
     return rv;
@@ -367,8 +390,8 @@ ck_rv_t pakchois_get_operation_state(pakchois_session_t *sess,
 ck_rv_t pakchois_set_operation_state(pakchois_session_t *sess,
 				     unsigned char *operation_state,
 				     unsigned long operation_state_len,
-				     pakchois_object_t encryption_key,
-				     pakchois_object_t authentiation_key)
+				     ck_object_handle_t encryption_key,
+				     ck_object_handle_t authentiation_key)
 {
     return CALLS4(SetOperationState, operation_state, operation_state_len,
                   encryption_key, authentiation_key);
@@ -388,34 +411,34 @@ ck_rv_t pakchois_logout(pakchois_session_t *sess)
 ck_rv_t pakchois_create_object(pakchois_session_t *sess,
 			       struct ck_attribute *templ,
 			       unsigned long count,
-			       pakchois_object_t *object)
+			       ck_object_handle_t *object)
 {
     return CALLS3(CreateObject, templ, count, object);
 }
 
 ck_rv_t pakchois_copy_object(pakchois_session_t *sess,
-			     pakchois_object_t object,
+			     ck_object_handle_t object,
 			     struct ck_attribute *templ, unsigned long count,
-			     pakchois_object_t *new_object)
+			     ck_object_handle_t *new_object)
 {
     return CALLS4(CopyObject, object, templ, count, new_object);
 }
 
 ck_rv_t pakchois_destroy_object(pakchois_session_t *sess,
-				pakchois_object_t object)
+				ck_object_handle_t object)
 {
     return CALLS1(DestroyObject, object);
 }    
 
 ck_rv_t pakchois_get_object_size(pakchois_session_t *sess,
-				 pakchois_object_t object,
+				 ck_object_handle_t object,
 				 unsigned long *size)
 {
     return CALLS2(GetObjectSize, object, size);
 }
 
 ck_rv_t pakchois_get_attribute_value(pakchois_session_t *sess,
-				     pakchois_object_t object,
+				     ck_object_handle_t object,
 				     struct ck_attribute *templ,
 				     unsigned long count)
 {
@@ -423,7 +446,7 @@ ck_rv_t pakchois_get_attribute_value(pakchois_session_t *sess,
 }
 
 ck_rv_t pakchois_set_attribute_value(pakchois_session_t *sess,
-				     pakchois_object_t object,
+				     ck_object_handle_t object,
 				     struct ck_attribute *templ,
 				     unsigned long count)
 {
@@ -438,7 +461,7 @@ ck_rv_t pakchois_find_objects_init(pakchois_session_t *sess,
 }
 
 ck_rv_t pakchois_find_objects(pakchois_session_t *sess,
-			      pakchois_object_t *object,
+			      ck_object_handle_t *object,
 			      unsigned long max_object_count,
 			      unsigned long *object_count)
 {
@@ -452,7 +475,7 @@ ck_rv_t pakchois_find_objects_final(pakchois_session_t *sess)
 
 ck_rv_t pakchois_encrypt_init(pakchois_session_t *sess,
 			      struct ck_mechanism *mechanism,
-			      pakchois_object_t key)
+			      ck_object_handle_t key)
 {
     return CALLS2(EncryptInit, mechanism, key);
 }
@@ -484,7 +507,7 @@ ck_rv_t pakchois_encrypt_final(pakchois_session_t *sess,
 
 ck_rv_t pakchois_decrypt_init(pakchois_session_t *sess,
 			      struct ck_mechanism *mechanism,
-			      pakchois_object_t key)
+			      ck_object_handle_t key)
 {
     return CALLS2(DecryptInit, mechanism, key);
 }
@@ -533,7 +556,7 @@ ck_rv_t pakchois_digest_update(pakchois_session_t *sess,
 }
 
 ck_rv_t pakchois_digest_key(pakchois_session_t *sess,
-			    pakchois_object_t key)
+			    ck_object_handle_t key)
 {
     return CALLS1(DigestKey, key);
 }
@@ -547,7 +570,7 @@ ck_rv_t pakchois_digest_final(pakchois_session_t *sess,
 
 ck_rv_t pakchois_sign_init(pakchois_session_t *sess,
 			   struct ck_mechanism *mechanism,
-			   pakchois_object_t key)
+			   ck_object_handle_t key)
 {
     return CALLS2(SignInit, mechanism, key);
 }
@@ -574,7 +597,7 @@ ck_rv_t pakchois_sign_final(pakchois_session_t *sess,
 
 ck_rv_t pakchois_sign_recover_init(pakchois_session_t *sess,
 				   struct ck_mechanism *mechanism,
-				   pakchois_object_t key)
+				   ck_object_handle_t key)
 {
     return CALLS2(SignRecoverInit, mechanism, key);
 }
@@ -589,7 +612,7 @@ ck_rv_t pakchois_sign_recover(pakchois_session_t *sess,
 
 ck_rv_t pakchois_verify_init(pakchois_session_t *sess,
 			     struct ck_mechanism *mechanism,
-			     pakchois_object_t key)
+			     ck_object_handle_t key)
 {
     return CALLS2(VerifyInit, mechanism, key);
 }
@@ -616,7 +639,7 @@ ck_rv_t pakchois_verify_final(pakchois_session_t *sess,
 
 ck_rv_t pakchois_verify_recover_init(pakchois_session_t *sess,
 				     struct ck_mechanism *mechanism,
-				     pakchois_object_t key)
+				     ck_object_handle_t key)
 {
     return CALLS2(VerifyRecoverInit, mechanism, key);
 }
@@ -672,7 +695,7 @@ ck_rv_t pakchois_decrypt_verify_update(pakchois_session_t *sess,
 ck_rv_t pakchois_generate_key(pakchois_session_t *sess,
 			      struct ck_mechanism *mechanism,
 			      struct ck_attribute *templ,
-			      unsigned long count, pakchois_object_t *key)
+			      unsigned long count, ck_object_handle_t *key)
 {
     return CALLS4(GenerateKey, mechanism, templ, count, key);
 }
@@ -683,8 +706,8 @@ ck_rv_t pakchois_generate_key_pair(pakchois_session_t *sess,
 				   unsigned long public_key_attribute_count,
 				   struct ck_attribute *private_key_template,
 				   unsigned long private_key_attribute_count,
-				   pakchois_object_t *public_key,
-				   pakchois_object_t *private_key)
+				   ck_object_handle_t *public_key,
+				   ck_object_handle_t *private_key)
 {
     return CALLS7(GenerateKeyPair, mechanism,
                   public_key_template, public_key_attribute_count,
@@ -694,8 +717,8 @@ ck_rv_t pakchois_generate_key_pair(pakchois_session_t *sess,
 
 ck_rv_t pakchois_wrap_key(pakchois_session_t *sess,
 			  struct ck_mechanism *mechanism,
-			  pakchois_object_t wrapping_key,
-			  pakchois_object_t key, unsigned char *wrapped_key,
+			  ck_object_handle_t wrapping_key,
+			  ck_object_handle_t key, unsigned char *wrapped_key,
 			  unsigned long *wrapped_key_len)
 {
     return CALLS5(WrapKey, mechanism, wrapping_key,
@@ -704,12 +727,12 @@ ck_rv_t pakchois_wrap_key(pakchois_session_t *sess,
 
 ck_rv_t pakchois_unwrap_key(pakchois_session_t *sess,
 			    struct ck_mechanism *mechanism,
-			    pakchois_object_t unwrapping_key,
+			    ck_object_handle_t unwrapping_key,
 			    unsigned char *wrapped_key,
 			    unsigned long wrapped_key_len,
 			    struct ck_attribute *templ,
 			    unsigned long attribute_count,
-			    pakchois_object_t *key)
+			    ck_object_handle_t *key)
 {
     return CALLS7(UnwrapKey, mechanism, unwrapping_key, 
                   wrapped_key, wrapped_key_len, templ, attribute_count,
@@ -718,10 +741,10 @@ ck_rv_t pakchois_unwrap_key(pakchois_session_t *sess,
 
 ck_rv_t pakchois_derive_key(pakchois_session_t *sess,
 			    struct ck_mechanism *mechanism,
-			    pakchois_object_t base_key,
+			    ck_object_handle_t base_key,
 			    struct ck_attribute *templ,
 			    unsigned long attribute_count,
-			    pakchois_object_t *key)
+			    ck_object_handle_t *key)
 {
     return CALLS5(DeriveKey, mechanism, base_key, templ, attribute_count, key);
 }

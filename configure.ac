@@ -5,6 +5,15 @@ AM_INIT_AUTOMAKE
 
 AC_PROG_LIBTOOL
 
+module_path="${libdir}:${libdir}/pkcs11"
+
+AC_ARG_ENABLE(module-path, 
+  [AS_HELP_STRING([--enable-module-path], 
+                  [PKCS#11 module directory search path])],
+  [test $enableval != "yes" && module_path=${enableval}])
+
+CPPFLAGS="$CPPFLAGS -DPAKCHOIS_MODPATH=\\\"${module_path}\\\""
+
 test x$GCC = xyes && CFLAGS="$CFLAGS -Wall"
 
 AC_CONFIG_FILES([Makefile pakchois.pc])
