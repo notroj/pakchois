@@ -121,13 +121,14 @@ static void *find_pkcs11_module(const char *name)
 ck_rv_t load_module(pakchois_module_t **module, const char *name, 
                     void *reserved)
 {
-    void *h = find_pkcs11_module(name);
     CK_C_GetFunctionList gfl;
     pakchois_module_t *ctx;
     struct ck_function_list *fns;
     struct ck_c_initialize_args args;
+    void *h;
     ck_rv_t rv;
 
+    h = find_pkcs11_module(name);
     if (!h) {
         return CKR_GENERAL_ERROR;
     }
