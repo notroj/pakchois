@@ -8,6 +8,6 @@ pkgconfig_DATA = pakchois.pc
 libpakchois_includedir = $(includedir)/pakchois
 libpakchois_include_HEADERS = pakchois11.h pakchois.h
 
-bin_PROGRAMS = test
+noinst_PROGRAMS = test
 test_SOURCES = test.c
 test_LDADD = libpakchois.la
