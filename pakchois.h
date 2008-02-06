@@ -43,6 +43,8 @@
 
 #include "pakchois11.h"
 
+/* API version: major is bumped for any backwards-incompatible
+ * changes. minor is bumped for any new interfaces. */
 #define PAKCHOIS_API_MAJOR (0)
 #define PAKCHOIS_API_MINOR (1)
 
