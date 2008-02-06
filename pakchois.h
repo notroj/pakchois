@@ -45,12 +45,23 @@
 
 typedef struct pakchois_module_s pakchois_module_t;
 typedef struct pakchois_session_s pakchois_session_t;
-typedef struct pakchois_object_s pakchois_object_t;
+typedef ck_object_handle_t pakchois_object_t;
 
 /* Load a PKCS#11 module by name (for example "opensc" or
- * "gnome-keyring").  Returns NULL if the module was not found or
- * could not be loaded. */
-pakchois_module_t *pakchois_module_load(const char *module);
+ * "gnome-keyring").  Returns CKR_OK on success. */
+ck_rv_t pakchois_module_load(pakchois_module_t **module, const char *name);
+
+/* Load an NSS "softokn" which violates the PKCS#11 standard in
+ * initialization, with given name (e.g. "softokn3").  The directory
+ * in which the NSS database resides must be specified; the other
+ * arguments may be NULL to use defaults. Returns CKR_OK on
+ * success. */
+ck_rv_t pakchois_module_nssload(pakchois_module_t **module, 
+                                const char *name,
+                                const char *directory,
+                                const char *cert_prefix,
+                                const char *key_prefix,
+                                const char *secmod_db);
 
 /* Destroy a PKCS#11 module. */
 void pakchois_module_destroy(pakchois_module_t *module);
@@ -75,10 +86,6 @@ void pakchois_module_destroy(pakchois_module_t *module);
    pakchois_module_load and pakchois_module_destroy).
 
 */
-
-ck_session_handle_t pakchois_session_handle(pakchois_session_t *sess);
-ck_object_handle_t pakchois_object_handle(pakchois_object_t *obj);
-
 ck_rv_t pakchois_get_info(pakchois_module_t *module, struct ck_info *info);
 
 ck_rv_t pakchois_get_slot_list(pakchois_module_t *module,
@@ -141,8 +148,8 @@ ck_rv_t pakchois_get_operation_state(pakchois_session_t *session,
 ck_rv_t pakchois_set_operation_state(pakchois_session_t *session,
 				     unsigned char *operation_state,
 				     unsigned long operation_state_len,
-				     pakchois_object_t *encryption_key,
-				     pakchois_object_t *authentiation_key);
+				     pakchois_object_t encryption_key,
+				     pakchois_object_t authentiation_key);
 
 ck_rv_t pakchois_login(pakchois_session_t *session, ck_user_type_t user_type,
 		       unsigned char *pin, unsigned long pin_len);
@@ -151,37 +158,37 @@ ck_rv_t pakchois_logout(pakchois_session_t *session);
 ck_rv_t pakchois_create_object(pakchois_session_t *session,
 			       struct ck_attribute *templ,
 			       unsigned long count,
-			       pakchois_object_t **object);
+			       pakchois_object_t *object);
 ck_rv_t pakchois_copy_object(pakchois_session_t *session,
-			     pakchois_object_t *object,
+			     pakchois_object_t object,
 			     struct ck_attribute *templ, unsigned long count,
-			     pakchois_object_t **new_object);
+			     pakchois_object_t *new_object);
 ck_rv_t pakchois_destroy_object(pakchois_session_t *session,
-				pakchois_object_t *object);
+				pakchois_object_t object);
 ck_rv_t pakchois_get_object_size(pakchois_session_t *session,
-				 pakchois_object_t *object,
+				 pakchois_object_t object,
 				 unsigned long *size);
 
 ck_rv_t pakchois_get_attribute_value(pakchois_session_t *session,
-				     pakchois_object_t *object,
+				     pakchois_object_t object,
 				     struct ck_attribute *templ,
 				     unsigned long count);
 ck_rv_t pakchois_set_attribute_value(pakchois_session_t *session,
-				     pakchois_object_t *object,
+				     pakchois_object_t object,
 				     struct ck_attribute *templ,
 				     unsigned long count);
 ck_rv_t pakchois_find_objects_init(pakchois_session_t *session,
 				   struct ck_attribute *templ,
 				   unsigned long count);
 ck_rv_t pakchois_find_objects(pakchois_session_t *session,
-			      pakchois_object_t **object,
+			      pakchois_object_t *object,
 			      unsigned long max_object_count,
 			      unsigned long *object_count);
 ck_rv_t pakchois_find_objects_final(pakchois_session_t *session);
 
 ck_rv_t pakchois_encrypt_init(pakchois_session_t *session,
 			      struct ck_mechanism *mechanism,
-			      pakchois_object_t *key);
+			      pakchois_object_t key);
 ck_rv_t pakchois_encrypt(pakchois_session_t *session,
 			 unsigned char *data, unsigned long data_len,
 			 unsigned char *encrypted_data,
@@ -196,7 +203,7 @@ ck_rv_t pakchois_encrypt_final(pakchois_session_t *session,
 
 ck_rv_t pakchois_decrypt_init(pakchois_session_t *session,
 			      struct ck_mechanism *mechanism,
-			      pakchois_object_t *key);
+			      pakchois_object_t key);
 ck_rv_t pakchois_decrypt(pakchois_session_t *session,
 			 unsigned char *encrypted_data,
 			 unsigned long encrypted_data_len,
@@ -216,14 +223,14 @@ ck_rv_t pakchois_digest(pakchois_session_t *session, unsigned char *data,
 ck_rv_t pakchois_digest_update(pakchois_session_t *session,
 			       unsigned char *part, unsigned long part_len);
 ck_rv_t pakchois_digest_key(pakchois_session_t *session,
-			    pakchois_object_t *key);
+			    pakchois_object_t key);
 ck_rv_t pakchois_digest_final(pakchois_session_t *session,
 			      unsigned char *digest,
 			      unsigned long *digest_len);
 
 ck_rv_t pakchois_sign_init(pakchois_session_t *session,
 			   struct ck_mechanism *mechanism,
-			   pakchois_object_t *key);
+			   pakchois_object_t key);
 ck_rv_t pakchois_sign(pakchois_session_t *session, unsigned char *data,
 		      unsigned long data_len, unsigned char *signature,
 		      unsigned long *signature_len);
@@ -234,7 +241,7 @@ ck_rv_t pakchois_sign_final(pakchois_session_t *session,
 			    unsigned long *signature_len);
 ck_rv_t pakchois_sign_recover_init(pakchois_session_t *session,
 				   struct ck_mechanism *mechanism,
-				   pakchois_object_t *key);
+				   pakchois_object_t key);
 ck_rv_t pakchois_sign_recover(pakchois_session_t *session,
 			      unsigned char *data, unsigned long data_len,
 			      unsigned char *signature,
@@ -242,7 +249,7 @@ ck_rv_t pakchois_sign_recover(pakchois_session_t *session,
 
 ck_rv_t pakchois_verify_init(pakchois_session_t *session,
 			     struct ck_mechanism *mechanism,
-			     pakchois_object_t *key);
+			     pakchois_object_t key);
 ck_rv_t pakchois_verify(pakchois_session_t *session, unsigned char *data,
 			unsigned long data_len, unsigned char *signature,
 			unsigned long signature_len);
@@ -253,7 +260,7 @@ ck_rv_t pakchois_verify_final(pakchois_session_t *session,
 			      unsigned long signature_len);
 ck_rv_t pakchois_verify_recover_init(pakchois_session_t *session,
 				     struct ck_mechanism *mechanism,
-				     pakchois_object_t *key);
+				     pakchois_object_t key);
 ck_rv_t pakchois_verify_recover(pakchois_session_t *session,
 				unsigned char *signature,
 				unsigned long signature_len,
@@ -283,35 +290,35 @@ ck_rv_t pakchois_decrypt_verify_update(pakchois_session_t *session,
 ck_rv_t pakchois_generate_key(pakchois_session_t *session,
 			      struct ck_mechanism *mechanism,
 			      struct ck_attribute *templ,
-			      unsigned long count, pakchois_object_t **key);
+			      unsigned long count, pakchois_object_t *key);
 ck_rv_t pakchois_generate_key_pair(pakchois_session_t *session,
 				   struct ck_mechanism *mechanism,
 				   struct ck_attribute *public_key_template,
 				   unsigned long public_key_attribute_count,
 				   struct ck_attribute *private_key_template,
 				   unsigned long private_key_attribute_count,
-				   pakchois_object_t **public_key,
-				   pakchois_object_t **private_key);
+				   pakchois_object_t *public_key,
+				   pakchois_object_t *private_key);
 
 ck_rv_t pakchois_wrap_key(pakchois_session_t *session,
 			  struct ck_mechanism *mechanism,
-			  pakchois_object_t *wrapping_key,
-			  pakchois_object_t *key, unsigned char *wrapped_key,
+			  pakchois_object_t wrapping_key,
+			  pakchois_object_t key, unsigned char *wrapped_key,
 			  unsigned long *wrapped_key_len);
 ck_rv_t pakchois_unwrap_key(pakchois_session_t *session,
 			    struct ck_mechanism *mechanism,
-			    pakchois_object_t *unwrapping_key,
+			    pakchois_object_t unwrapping_key,
 			    unsigned char *wrapped_key,
 			    unsigned long wrapped_key_len,
 			    struct ck_attribute *templ,
 			    unsigned long attribute_count,
-			    pakchois_object_t **key);
+			    pakchois_object_t *key);
 ck_rv_t pakchois_derive_key(pakchois_session_t *session,
 			    struct ck_mechanism *mechanism,
-			    pakchois_object_t *base_key,
+			    pakchois_object_t base_key,
 			    struct ck_attribute *templ,
 			    unsigned long attribute_count,
-			    pakchois_object_t **key);
+			    pakchois_object_t *key);
 
 ck_rv_t pakchois_seed_random(pakchois_session_t *session,
 			     unsigned char *seed, unsigned long seed_len);

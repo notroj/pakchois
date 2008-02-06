@@ -58,11 +58,6 @@ struct pakchois_session_s {
     void *notify_data;
 };
     
-struct pakchois_object_s {
-    pakchois_session_t *session;
-    ck_object_handle_t id;
-};
-
 struct slot {
     ck_slot_id_t id;
     pakchois_session_t *sessions;
@@ -75,10 +70,12 @@ static const char *location_list[] = {
     NULL
 };
 
-static const char *suffix_list[] = {
-    ".so",
-    "-pkcs11.so",
-    NULL
+static const char *suffix_prefixes[][2] = {
+    { "", ".so" },
+    { "lib", ".so" },
+    { "lib", "pk11.so" },
+    { "", "-pkcs11.so" },
+    { NULL, NULL },
 };
 
 #define CALL(name, args) (ctx->fns->C_ ## name) args
@@ -97,9 +94,9 @@ static void *find_pkcs11_module(const char *name)
     void *h;
     
     for (i = 0; location_list[i]; i++) {
-        for (j = 0; suffix_list[j]; j++) {
-            snprintf(path, sizeof path, "%s/%s%s", location_list[i], name,
-                     suffix_list[j]);
+        for (j = 0; suffix_prefixes[j][0]; j++) {
+            snprintf(path, sizeof path, "%s/%s%s%s", location_list[i],
+                     suffix_prefixes[j][0], name, suffix_prefixes[j][1]);
 
             h = dlopen(path, RTLD_LOCAL|RTLD_NOW);
             if (h != NULL)
@@ -110,44 +107,73 @@ static void *find_pkcs11_module(const char *name)
     return NULL;
 }            
 
-pakchois_module_t *pakchois_module_load(const char *name)
+ck_rv_t load_module(pakchois_module_t **module, const char *name, 
+                    void *reserved)
 {
     void *h = find_pkcs11_module(name);
     CK_C_GetFunctionList gfl;
     pakchois_module_t *ctx;
     struct ck_function_list *fns;
     struct ck_c_initialize_args args;
+    ck_rv_t rv;
 
     if (!h) {
-        return NULL;
+        return CKR_GENERAL_ERROR;
     }
 
     gfl = dlsym(h, "C_GetFunctionList");
     if (!gfl) {
         dlclose(h);
-        return NULL;
+        return CKR_GENERAL_ERROR;
     }
     
-    if (gfl(&fns) != CKR_OK) {
+    rv = gfl(&fns);
+    if (rv != CKR_OK) {
         dlclose(h);
-        return NULL;
+        return rv;
     }
 
     /* Require OS locking, the only sane option. */
     memset(&args, 0, sizeof args);
     args.flags = CKF_OS_LOCKING_OK;          
-    
-    if (fns->C_Initialize(&args) != CKR_OK) {
+    args.reserved = reserved;
+
+    rv = fns->C_Initialize(&args);
+    if (rv != CKR_OK) {
         dlclose(h);
-        return NULL;
+        return rv;
     }
 
-    ctx = malloc(sizeof *ctx);
+    *module = ctx = malloc(sizeof *ctx);
     ctx->handle = h;
     ctx->fns = fns;
+    ctx->slots = NULL;
     
-    return ctx;
+    return CKR_OK;
 }    
+
+ck_rv_t pakchois_module_load(pakchois_module_t **module, const char *name)
+{
+    return load_module(module, name, NULL);
+}
+
+ck_rv_t pakchois_module_nssload(pakchois_module_t **module, 
+                                const char *name,
+                                const char *directory,
+                                const char *cert_prefix,
+                                const char *key_prefix,
+                                const char *secmod_db)
+{
+    char buf[256];
+
+    snprintf(buf, sizeof buf, 
+             "configdir='%s' certPrefix='%s' keyPrefix='%s' secmod='%s'",
+             directory, cert_prefix ? cert_prefix : "",
+             key_prefix ? key_prefix : "", 
+             secmod_db ? secmod_db : "secmod.db");
+
+    return load_module(module, name, buf);
+}
 
 void pakchois_module_destroy(pakchois_module_t *ctx)
 {
@@ -282,7 +308,7 @@ ck_rv_t pakchois_open_session(pakchois_module_t *ctx,
     pakchois_session_t *sess;
     ck_rv_t rv;
 
-    sess = malloc(sizeof *sess);
+    sess = calloc(1, sizeof *sess);
     rv = CALL(OpenSession, (slot_id, flags, sess, notify_thunk, &sh));
     if (rv != CKR_OK) {
         free(sess);
@@ -341,11 +367,11 @@ ck_rv_t pakchois_get_operation_state(pakchois_session_t *sess,
 ck_rv_t pakchois_set_operation_state(pakchois_session_t *sess,
 				     unsigned char *operation_state,
 				     unsigned long operation_state_len,
-				     pakchois_object_t *encryption_key,
-				     pakchois_object_t *authentiation_key)
+				     pakchois_object_t encryption_key,
+				     pakchois_object_t authentiation_key)
 {
     return CALLS4(SetOperationState, operation_state, operation_state_len,
-                  encryption_key->id, authentiation_key->id);
+                  encryption_key, authentiation_key);
 }
 
 ck_rv_t pakchois_login(pakchois_session_t *sess, ck_user_type_t user_type,
@@ -359,82 +385,49 @@ ck_rv_t pakchois_logout(pakchois_session_t *sess)
     return CALLS(Logout, (sess->id));
 }
 
-static pakchois_object_t *object_new(pakchois_session_t *sess,
-                                     ck_object_handle_t oh)
-{
-    pakchois_object_t *obj = calloc(sizeof 1, sizeof *obj);
-    
-    obj->session = sess;
-    obj->id = oh;
-    
-    return obj;
-}    
-
 ck_rv_t pakchois_create_object(pakchois_session_t *sess,
 			       struct ck_attribute *templ,
 			       unsigned long count,
-			       pakchois_object_t **object)
+			       pakchois_object_t *object)
 {
-    ck_object_handle_t oh;
-    ck_rv_t rv;
-    
-    rv = CALLS3(CreateObject, templ, count, &oh);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    *object = object_new(sess, oh);
-
-    return CKR_OK;
+    return CALLS3(CreateObject, templ, count, object);
 }
 
 ck_rv_t pakchois_copy_object(pakchois_session_t *sess,
-			     pakchois_object_t *object,
+			     pakchois_object_t object,
 			     struct ck_attribute *templ, unsigned long count,
-			     pakchois_object_t **new_object)
+			     pakchois_object_t *new_object)
 {
-    ck_object_handle_t oh;
-    ck_rv_t rv;
-    
-    rv = CALLS4(CopyObject, object->id, templ, count, &oh);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    *new_object = object_new(sess, oh);
-
-    return CKR_OK;
+    return CALLS4(CopyObject, object, templ, count, new_object);
 }
 
 ck_rv_t pakchois_destroy_object(pakchois_session_t *sess,
-				pakchois_object_t *object)
+				pakchois_object_t object)
 {
-    ck_rv_t rv = CALLS1(DestroyObject, object->id);
-    free(object);
-    return rv;
+    return CALLS1(DestroyObject, object);
 }    
 
 ck_rv_t pakchois_get_object_size(pakchois_session_t *sess,
-				 pakchois_object_t *object,
+				 pakchois_object_t object,
 				 unsigned long *size)
 {
-    return CALLS2(GetObjectSize, object->id, size);
+    return CALLS2(GetObjectSize, object, size);
 }
 
 ck_rv_t pakchois_get_attribute_value(pakchois_session_t *sess,
-				     pakchois_object_t *object,
+				     pakchois_object_t object,
 				     struct ck_attribute *templ,
 				     unsigned long count)
 {
-    return CALLS3(GetAttributeValue, object->id, templ, count);
+    return CALLS3(GetAttributeValue, object, templ, count);
 }
 
 ck_rv_t pakchois_set_attribute_value(pakchois_session_t *sess,
-				     pakchois_object_t *object,
+				     pakchois_object_t object,
 				     struct ck_attribute *templ,
 				     unsigned long count)
 {
-    return CALLS3(SetAttributeValue, object->id, templ, count);
+    return CALLS3(SetAttributeValue, object, templ, count);
 }
 
 ck_rv_t pakchois_find_objects_init(pakchois_session_t *sess,
@@ -445,27 +438,11 @@ ck_rv_t pakchois_find_objects_init(pakchois_session_t *sess,
 }
 
 ck_rv_t pakchois_find_objects(pakchois_session_t *sess,
-			      pakchois_object_t **object,
+			      pakchois_object_t *object,
 			      unsigned long max_object_count,
 			      unsigned long *object_count)
 {
-    ck_rv_t rv;
-    ck_object_handle_t *oh;
-    unsigned n;
-
-    oh = malloc(max_object_count * sizeof *oh);
-    rv = CALLS3(FindObjects, oh, max_object_count, object_count);
-    if (rv != CKR_OK) {
-        free(oh);
-    }
-
-    for (n = 0; n < *object_count; n++) {
-        object[n] = object_new(sess, oh[n]);
-    }
-
-    free(oh);
-
-    return CKR_OK;
+    return CALLS3(FindObjects, object, max_object_count, object_count);
 }
 
 ck_rv_t pakchois_find_objects_final(pakchois_session_t *sess)
@@ -475,9 +452,9 @@ ck_rv_t pakchois_find_objects_final(pakchois_session_t *sess)
 
 ck_rv_t pakchois_encrypt_init(pakchois_session_t *sess,
 			      struct ck_mechanism *mechanism,
-			      pakchois_object_t *key)
+			      pakchois_object_t key)
 {
-    return CALLS2(EncryptInit, mechanism, key->id);
+    return CALLS2(EncryptInit, mechanism, key);
 }
 
 ck_rv_t pakchois_encrypt(pakchois_session_t *sess,
@@ -485,8 +462,8 @@ ck_rv_t pakchois_encrypt(pakchois_session_t *sess,
 			 unsigned char *encrypted_data,
 			 unsigned long *encrypted_data_len)
 {
-    return CALLS(Encrypt, (sess->id, data, data_len, 
-                           encrypted_data, encrypted_data_len));
+    return CALLS4(Encrypt, data, data_len, 
+                  encrypted_data, encrypted_data_len);
 }
 
 ck_rv_t pakchois_encrypt_update(pakchois_session_t *sess,
@@ -494,8 +471,8 @@ ck_rv_t pakchois_encrypt_update(pakchois_session_t *sess,
 				unsigned char *encrypted_part,
 				unsigned long *encrypted_part_len)
 {
-    return CALLS(EncryptUpdate, (sess->id, part, part_len,
-                                 encrypted_part, encrypted_part_len));
+    return CALLS4(EncryptUpdate, part, part_len, 
+                  encrypted_part, encrypted_part_len);
 }
 
 ck_rv_t pakchois_encrypt_final(pakchois_session_t *sess,
@@ -507,9 +484,9 @@ ck_rv_t pakchois_encrypt_final(pakchois_session_t *sess,
 
 ck_rv_t pakchois_decrypt_init(pakchois_session_t *sess,
 			      struct ck_mechanism *mechanism,
-			      pakchois_object_t *key)
+			      pakchois_object_t key)
 {
-    return CALLS2(DecryptInit, mechanism, key->id);
+    return CALLS2(DecryptInit, mechanism, key);
 }
 
 ck_rv_t pakchois_decrypt(pakchois_session_t *sess,
@@ -556,9 +533,9 @@ ck_rv_t pakchois_digest_update(pakchois_session_t *sess,
 }
 
 ck_rv_t pakchois_digest_key(pakchois_session_t *sess,
-			    pakchois_object_t *key)
+			    pakchois_object_t key)
 {
-    return CALLS1(DigestKey, key->id);
+    return CALLS1(DigestKey, key);
 }
 
 ck_rv_t pakchois_digest_final(pakchois_session_t *sess,
@@ -570,9 +547,9 @@ ck_rv_t pakchois_digest_final(pakchois_session_t *sess,
 
 ck_rv_t pakchois_sign_init(pakchois_session_t *sess,
 			   struct ck_mechanism *mechanism,
-			   pakchois_object_t *key)
+			   pakchois_object_t key)
 {
-    return CALLS2(SignInit, mechanism, key->id);
+    return CALLS2(SignInit, mechanism, key);
 }
 
 ck_rv_t pakchois_sign(pakchois_session_t *sess, unsigned char *data,
@@ -597,9 +574,9 @@ ck_rv_t pakchois_sign_final(pakchois_session_t *sess,
 
 ck_rv_t pakchois_sign_recover_init(pakchois_session_t *sess,
 				   struct ck_mechanism *mechanism,
-				   pakchois_object_t *key)
+				   pakchois_object_t key)
 {
-    return CALLS2(SignRecoverInit, mechanism, key->id);
+    return CALLS2(SignRecoverInit, mechanism, key);
 }
 
 ck_rv_t pakchois_sign_recover(pakchois_session_t *sess,
@@ -612,9 +589,9 @@ ck_rv_t pakchois_sign_recover(pakchois_session_t *sess,
 
 ck_rv_t pakchois_verify_init(pakchois_session_t *sess,
 			     struct ck_mechanism *mechanism,
-			     pakchois_object_t *key)
+			     pakchois_object_t key)
 {
-    return CALLS2(VerifyInit, mechanism, key->id);
+    return CALLS2(VerifyInit, mechanism, key);
 }
 
 ck_rv_t pakchois_verify(pakchois_session_t *sess, unsigned char *data,
@@ -639,9 +616,9 @@ ck_rv_t pakchois_verify_final(pakchois_session_t *sess,
 
 ck_rv_t pakchois_verify_recover_init(pakchois_session_t *sess,
 				     struct ck_mechanism *mechanism,
-				     pakchois_object_t *key)
+				     pakchois_object_t key)
 {
-    return CALLS2(VerifyRecoverInit, mechanism, key->id);
+    return CALLS2(VerifyRecoverInit, mechanism, key);
 }
 
 ck_rv_t pakchois_verify_recover(pakchois_session_t *sess,
@@ -695,19 +672,9 @@ ck_rv_t pakchois_decrypt_verify_update(pakchois_session_t *sess,
 ck_rv_t pakchois_generate_key(pakchois_session_t *sess,
 			      struct ck_mechanism *mechanism,
 			      struct ck_attribute *templ,
-			      unsigned long count, pakchois_object_t **key)
+			      unsigned long count, pakchois_object_t *key)
 {
-    ck_object_handle_t oh;
-    ck_rv_t rv;
-
-    rv = CALLS4(GenerateKey, mechanism, templ, count, &oh);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-    
-    *key = object_new(sess, oh);
-
-    return CKR_OK;
+    return CALLS4(GenerateKey, mechanism, templ, count, key);
 }
 
 ck_rv_t pakchois_generate_key_pair(pakchois_session_t *sess,
@@ -716,80 +683,47 @@ ck_rv_t pakchois_generate_key_pair(pakchois_session_t *sess,
 				   unsigned long public_key_attribute_count,
 				   struct ck_attribute *private_key_template,
 				   unsigned long private_key_attribute_count,
-				   pakchois_object_t **public_key,
-				   pakchois_object_t **private_key)
+				   pakchois_object_t *public_key,
+				   pakchois_object_t *private_key)
 {
-    ck_rv_t rv;
-    ck_object_handle_t pubkey, privkey;
-
-    rv = CALLS(GenerateKeyPair, (sess->id, mechanism, public_key_template,
-                                 public_key_attribute_count,
-                                 private_key_template, 
-                                 private_key_attribute_count,
-                                 &pubkey, &privkey));
-    if (rv != CKR_OK) {
-        return rv;
-    }
-
-    *public_key = object_new(sess, pubkey);
-    *private_key = object_new(sess, privkey);
-    
-    return CKR_OK;
+    return CALLS7(GenerateKeyPair, mechanism,
+                  public_key_template, public_key_attribute_count,
+                  private_key_template, private_key_attribute_count,
+                  public_key, private_key);
 }
 
 ck_rv_t pakchois_wrap_key(pakchois_session_t *sess,
 			  struct ck_mechanism *mechanism,
-			  pakchois_object_t *wrapping_key,
-			  pakchois_object_t *key, unsigned char *wrapped_key,
+			  pakchois_object_t wrapping_key,
+			  pakchois_object_t key, unsigned char *wrapped_key,
 			  unsigned long *wrapped_key_len)
 {
-    return CALLS5(WrapKey, mechanism, wrapping_key->id,
-                  key->id, wrapped_key, wrapped_key_len);
+    return CALLS5(WrapKey, mechanism, wrapping_key,
+                  key, wrapped_key, wrapped_key_len);
 }    
 
 ck_rv_t pakchois_unwrap_key(pakchois_session_t *sess,
 			    struct ck_mechanism *mechanism,
-			    pakchois_object_t *unwrapping_key,
+			    pakchois_object_t unwrapping_key,
 			    unsigned char *wrapped_key,
 			    unsigned long wrapped_key_len,
 			    struct ck_attribute *templ,
 			    unsigned long attribute_count,
-			    pakchois_object_t **key)
+			    pakchois_object_t *key)
 {
-    ck_object_handle_t oh;
-    ck_rv_t rv;
-
-    rv = CALLS7(UnwrapKey, mechanism, unwrapping_key->id, 
-                wrapped_key, wrapped_key_len, templ, attribute_count,
-                &oh);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-    
-    *key = object_new(sess, oh);
-
-    return CKR_OK;
+    return CALLS7(UnwrapKey, mechanism, unwrapping_key, 
+                  wrapped_key, wrapped_key_len, templ, attribute_count,
+                  key);
 }
 
 ck_rv_t pakchois_derive_key(pakchois_session_t *sess,
 			    struct ck_mechanism *mechanism,
-			    pakchois_object_t *base_key,
+			    pakchois_object_t base_key,
 			    struct ck_attribute *templ,
 			    unsigned long attribute_count,
-			    pakchois_object_t **key)
+			    pakchois_object_t *key)
 {
-    ck_object_handle_t oh;
-    ck_rv_t rv;
-
-    rv = CALLS5(DeriveKey, mechanism, base_key->id, 
-                templ, attribute_count, &oh);
-    if (rv != CKR_OK) {
-        return rv;
-    }
-    
-    *key = object_new(sess, oh);
-
-    return CKR_OK;
+    return CALLS5(DeriveKey, mechanism, base_key, templ, attribute_count, key);
 }
 
 
