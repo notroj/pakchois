@@ -43,6 +43,9 @@
 
 #include "pakchois11.h"
 
+#define PAKCHOIS_API_MAJOR (0)
+#define PAKCHOIS_API_MINOR (1)
+
 typedef struct pakchois_module_s pakchois_module_t;
 typedef struct pakchois_session_s pakchois_session_t;
 
