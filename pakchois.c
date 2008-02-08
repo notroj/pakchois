@@ -69,10 +69,10 @@ struct slot {
 };
 
 static const char *suffix_prefixes[][2] = {
-    { "", ".so" },
-    { "lib", ".so" },
     { "lib", "pk11.so" },
     { "", "-pkcs11.so" },
+    { "", ".so" },
+    { "lib", ".so" },
     { NULL, NULL },
 };
 
@@ -85,7 +85,7 @@ static const char *suffix_prefixes[][2] = {
 #define CALLS5(n, a, b, c, d, e) CALLS(n, (sess->id, a, b, c, d, e))
 #define CALLS7(n, a, b, c, d, e, f, g) CALLS(n, (sess->id, a, b, c, d, e, f, g))
 
-static void *find_pkcs11_module(const char *name)
+static void *find_pkcs11_module(const char *name, CK_C_GetFunctionList *gfl)
 {
     char module_path[] = PAKCHOIS_MODPATH;
     char *next = module_path;
@@ -110,8 +110,13 @@ static void *find_pkcs11_module(const char *name)
                      suffix_prefixes[i][0], name, suffix_prefixes[i][1]);
 
             h = dlopen(path, RTLD_LOCAL|RTLD_NOW);
-            if (h != NULL)
-                return h;
+            if (h != NULL) {
+                *gfl = dlsym(h, "C_GetFunctionList");
+                if (*gfl) {
+                    return h;
+                }
+                dlclose(h);
+            }
         }
     }
 
@@ -128,14 +133,8 @@ ck_rv_t load_module(pakchois_module_t **module, const char *name,
     void *h;
     ck_rv_t rv;
 
-    h = find_pkcs11_module(name);
+    h = find_pkcs11_module(name, &gfl);
     if (!h) {
-        return CKR_GENERAL_ERROR;
-    }
-
-    gfl = dlsym(h, "C_GetFunctionList");
-    if (!gfl) {
-        dlclose(h);
         return CKR_GENERAL_ERROR;
     }
     
