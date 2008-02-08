@@ -1,2 +1,5 @@
+Changes in release 0.2:
+* Fix module loading if module path includes ${libdir}
+
 Changes in release 0.1:
 * Initial release.
