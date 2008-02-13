@@ -1,9 +1,13 @@
-AC_INIT([pakchois], 0.2, [joe@manyfish.co.uk])
+AC_INIT([pakchois], 0.3, [joe@manyfish.co.uk])
 AC_CONFIG_HEADER([config.h])
 AC_CONFIG_SRCDIR([pakchois.c])
 AM_INIT_AUTOMAKE
 
 AC_PROG_LIBTOOL
+
+# libtool library version -- CURRENT:REVISION:AGE
+PK_LTVERSINFO=0:3:0
+AC_SUBST(PK_LTVERSINFO)
 
 module_path="${libdir}:${libdir}/pkcs11"
 

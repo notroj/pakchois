@@ -1,6 +1,6 @@
 lib_LTLIBRARIES = libpakchois.la
 libpakchois_la_SOURCES = pakchois.c pakchois11.h pakchois.h
-libpakchois_la_LDFLAGS = -version-info 0:0:0 -ldl
+libpakchois_la_LDFLAGS = -version-info $(PK_LTVERSINFO) -ldl
 
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = pakchois.pc
