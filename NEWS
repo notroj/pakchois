@@ -1,3 +1,7 @@
+Changes in release 0.3:
+* Handle malloc failure gracefully throughout.
+* Add pakchois_error().
+
 Changes in release 0.2:
 * Fix module loading if module path includes ${libdir}
 
