@@ -44,9 +44,15 @@
 #include "pakchois11.h"
 
 /* API version: major is bumped for any backwards-incompatible
- * changes. minor is bumped for any new interfaces. */
+ * changes. minor is bumped for any new interfaces.  Note that the API
+ * is versioned independent of the project release version.  */
 #define PAKCHOIS_API_MAJOR (0)
-#define PAKCHOIS_API_MINOR (1)
+#define PAKCHOIS_API_MINOR (2)
+
+/* API history:
+   0.1: Initial release
+   0.2: Addition of pakchois_error()
+*/
 
 typedef struct pakchois_module_s pakchois_module_t;
 typedef struct pakchois_session_s pakchois_session_t;
@@ -69,6 +75,10 @@ ck_rv_t pakchois_module_nssload(pakchois_module_t **module,
 
 /* Destroy a PKCS#11 module. */
 void pakchois_module_destroy(pakchois_module_t *module);
+
+/* Return the error string corresponding to the given return value.
+ * Never returns NULL.  */
+const char *pakchois_error(ck_rv_t rv);
 
 /* All following interfaces model the PKCS#11 equivalents, without the
    camel-cased naming convention.  The PKCS#11 specification has
