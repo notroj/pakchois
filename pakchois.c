@@ -73,7 +73,7 @@ static const char *suffix_prefixes[][2] = {
     { "", "-pkcs11.so" },
     { "", ".so" },
     { "lib", ".so" },
-    { NULL, NULL },
+    { NULL, NULL }
 };
 
 #define CALL(name, args) (ctx->fns->C_ ## name) args
@@ -156,6 +156,10 @@ ck_rv_t load_module(pakchois_module_t **module, const char *name,
     }
 
     *module = ctx = malloc(sizeof *ctx);
+    if (ctx == NULL) {
+        return CKR_HOST_MEMORY;
+    }
+
     ctx->handle = h;
     ctx->fns = fns;
     ctx->slots = NULL;
@@ -292,6 +296,10 @@ static struct slot *find_or_create_slot(pakchois_module_t *ctx,
     }
 
     slot = malloc(sizeof *slot);
+    if (!slot) {
+        return NULL;
+    }
+    
     slot->id = id;
     slot->sessions = NULL;
     slot->next = ctx->slots;
@@ -300,18 +308,24 @@ static struct slot *find_or_create_slot(pakchois_module_t *ctx,
     return slot;
 }
 
-static void insert_session(pakchois_module_t *ctx,
-                           pakchois_session_t *session,
-                           ck_slot_id_t id)
+static ck_rv_t insert_session(pakchois_module_t *ctx,
+                              pakchois_session_t *session,
+                              ck_slot_id_t id)
 {
     struct slot *slot = find_or_create_slot(ctx, id);
     
+    if (!slot) {
+        return CKR_HOST_MEMORY;
+    }
+
     session->prevref = &slot->sessions;
     session->next = slot->sessions;
     if (session->next) {
         session->next->prevref = session->prevref;
     }
     slot->sessions = session;
+
+    return CKR_OK;
 }
 
 ck_rv_t pakchois_open_session(pakchois_module_t *ctx,
@@ -324,6 +338,10 @@ ck_rv_t pakchois_open_session(pakchois_module_t *ctx,
     ck_rv_t rv;
 
     sess = calloc(1, sizeof *sess);
+    if (sess == NULL) {
+        return CKR_HOST_MEMORY;
+    }    
+
     rv = CALL(OpenSession, (slot_id, flags, sess, notify_thunk, &sh));
     if (rv != CKR_OK) {
         free(sess);
@@ -333,9 +351,8 @@ ck_rv_t pakchois_open_session(pakchois_module_t *ctx,
     *session = sess;
     sess->context = ctx;
     sess->id = sh;
-    insert_session(ctx, sess, slot_id);
-    
-    return CKR_OK;
+
+    return insert_session(ctx, sess, slot_id);
 }
 
 ck_rv_t pakchois_close_session(pakchois_session_t *sess)
