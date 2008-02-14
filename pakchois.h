@@ -52,13 +52,17 @@
 /* API history:
    0.1: Initial release
    0.2: Addition of pakchois_error()
+        Concurrent access guarantee added for pakchois_module_load()
+        Thread-safety guarantee added for pakchois_wait_for_slot_event()
 */
 
 typedef struct pakchois_module_s pakchois_module_t;
 typedef struct pakchois_session_s pakchois_session_t;
 
 /* Load a PKCS#11 module by name (for example "opensc" or
- * "gnome-keyring").  Returns CKR_OK on success. */
+ * "gnome-keyring").  Returns CKR_OK on success.  Any module of given
+ * name may be safely loaded multiple times within an application; the
+ * underlying PKCS#11 provider will be loaded only once. */
 ck_rv_t pakchois_module_load(pakchois_module_t **module, const char *name);
 
 /* Load an NSS "softokn" which violates the PKCS#11 standard in
@@ -88,15 +92,24 @@ const char *pakchois_error(ck_rv_t rv);
 
    The differences between this interface and PKCS#11 are:
    
-   1. some interfaces take a module pointer as first argument,
+   1. some interfaces take a module pointer as first argument
 
-   2. session handlers are represented as opaque objects,
+   2. session handlers are represented as opaque objects
 
-   3. the notify callback type has changed accordingly,
+   3. the notify callback type has changed accordingly
 
    4. the C_Initialize, C_Finalize, and C_GetFunctionList interfaces
    are not exposed (these are called internally by
-   pakchois_module_load and pakchois_module_destroy).
+   pakchois_module_load and pakchois_module_destroy)
+
+   5. pakchois_wait_for_slot_event() is thread-safe against other
+   callers of pakchois_wait_for_slot_event(); the call to the
+   underlying provider's WaitForSlotEvent function is protected by a
+   mutex.
+
+   6. pakchois_close_all_sessions() only closes sessions associated
+   with the given module instance; any sessions opened by other users
+   of the underlying provider are unaffected.
 
 */
 ck_rv_t pakchois_get_info(pakchois_module_t *module, struct ck_info *info);

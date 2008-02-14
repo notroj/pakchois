@@ -1,5 +1,6 @@
 Changes in release 0.3:
 * Handle malloc failure gracefully throughout.
+* Support concurrent access to multiple modules of same name.
 * Add pakchois_error().
 
 Changes in release 0.2:

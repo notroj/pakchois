@@ -42,17 +42,32 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <pthread.h>
+#include <assert.h>
 
 #include "pakchois.h"
 
-struct pakchois_module_s {
+struct provider {
+    char *name;
     void *handle;
     const struct ck_function_list *fns;
-    struct slot *slots;
+    unsigned int refcount;
+    struct provider *next, **prevref;
 };
 
+struct pakchois_module_s {
+    struct slot *slots;
+    struct provider *provider;
+};
+
+static pthread_mutex_t provider_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+/* List of loaded providers; any modification to the list or any
+ * individual module must performed whilst holding this mutex. */
+static struct provider *provider_list;
+
 struct pakchois_session_s {
-    pakchois_module_t *context;
+    pakchois_module_t *module;
     ck_session_handle_t id;
     pakchois_notify_t notify;
     void *notify_data;
@@ -76,8 +91,8 @@ static const char *suffix_prefixes[][2] = {
     { NULL, NULL }
 };
 
-#define CALL(name, args) (ctx->fns->C_ ## name) args
-#define CALLS(name, args) (sess->context->fns->C_ ## name) args
+#define CALL(name, args) (mod->provider->fns->C_ ## name) args
+#define CALLS(name, args) (sess->module->provider->fns->C_ ## name) args
 #define CALLS1(n, a) CALLS(n, (sess->id, a))
 #define CALLS2(n, a, b) CALLS(n, (sess->id, a, b))
 #define CALLS3(n, a, b, c) CALLS(n, (sess->id, a, b, c))
@@ -123,26 +138,69 @@ static void *find_pkcs11_module(const char *name, CK_C_GetFunctionList *gfl)
     return NULL;
 }            
 
-ck_rv_t load_module(pakchois_module_t **module, const char *name, 
-                    void *reserved)
+static struct provider *find_provider(const char *name)
+{
+    struct provider *p;
+
+    for (p = provider_list; p; p = p->next) {
+        if (strcmp(name, p->name) == 0) {
+            return p;
+        }
+    }
+
+    return NULL;    
+}
+
+static ck_rv_t load_provider(struct provider **provider, const char *name, 
+                             void *reserved)
 {
     CK_C_GetFunctionList gfl;
-    pakchois_module_t *ctx;
+    struct provider *prov;
     struct ck_function_list *fns;
     struct ck_c_initialize_args args;
     void *h;
     ck_rv_t rv;
+    char *cname;
+
+    if (pthread_mutex_lock(&provider_mutex) != 0) {
+        return CKR_CANT_LOCK;
+    }
+
+    prov = find_provider(name);
+    if (prov) {
+        prov->refcount++;
+        *provider = prov;
+        pthread_mutex_unlock(&provider_mutex);
+        return CKR_OK;
+    }
 
     h = find_pkcs11_module(name, &gfl);
     if (!h) {
-        return CKR_GENERAL_ERROR;
+        rv = CKR_GENERAL_ERROR;
+        goto fail_locked;
     }
     
     rv = gfl(&fns);
     if (rv != CKR_OK) {
-        dlclose(h);
-        return rv;
+        goto fail_dso;
     }
+    
+    cname = strdup(name);
+    if (cname == NULL) {
+        rv = CKR_HOST_MEMORY;
+        goto fail_dso;
+    }
+
+    *provider = prov = malloc(sizeof *prov);
+    if (prov == NULL) {
+        rv = CKR_HOST_MEMORY;
+        goto fail_ndup;
+    }
+    
+    prov->name = cname;
+    prov->handle = h;
+    prov->fns = fns;
+    prov->refcount = 1;
 
     /* Require OS locking, the only sane option. */
     memset(&args, 0, sizeof args);
@@ -151,19 +209,47 @@ ck_rv_t load_module(pakchois_module_t **module, const char *name,
 
     rv = fns->C_Initialize(&args);
     if (rv != CKR_OK) {
-        dlclose(h);
+        goto fail_ctx;
+    }
+
+    prov->next = provider_list;
+    prov->prevref = &provider_list;
+    if (prov->next) {
+        prov->next->prevref = &prov->next;
+    }
+    provider_list = prov;
+
+    pthread_mutex_unlock(&provider_mutex);
+    
+    return CKR_OK;
+fail_ctx:        
+    free(prov);
+fail_ndup:
+    free(cname);
+fail_dso:
+    dlclose(h);
+fail_locked:
+    pthread_mutex_unlock(&provider_mutex);
+    *provider = NULL;
+    return rv;
+}    
+
+ck_rv_t load_module(pakchois_module_t **module, const char *name, 
+                    void *reserved)
+{
+    ck_rv_t rv;
+    struct provider *provider;
+    pakchois_module_t *pm;
+
+    rv = load_provider(&provider, name, reserved);
+    if (rv) {
         return rv;
     }
-
-    *module = ctx = malloc(sizeof *ctx);
-    if (ctx == NULL) {
-        return CKR_HOST_MEMORY;
-    }
-
-    ctx->handle = h;
-    ctx->fns = fns;
-    ctx->slots = NULL;
     
+    *module = pm = malloc(sizeof *pm);
+    pm->provider = provider;
+    pm->slots = NULL;
+
     return CKR_OK;
 }    
 
@@ -190,19 +276,56 @@ ck_rv_t pakchois_module_nssload(pakchois_module_t **module,
     return load_module(module, name, buf);
 }
 
-void pakchois_module_destroy(pakchois_module_t *ctx)
+static void provider_unref(struct provider *prov)
 {
-    CALL(Finalize, (NULL));
-    dlclose(ctx->handle);
-    free(ctx);
+    assert(pthread_mutex_lock(&provider_mutex) == 0);
+
+    if (--prov->refcount == 0) {
+        prov->fns->C_Finalize(NULL);
+        dlclose(prov->handle);
+        *prov->prevref = prov->next;
+        if (prov->next) {
+            prov->next->prevref = prov->prevref;
+        }
+        free(prov->name);
+        free(prov);
+    }
+    pthread_mutex_unlock(&provider_mutex);
 }
 
-ck_rv_t pakchois_get_info(pakchois_module_t *ctx, struct ck_info *info)
+void pakchois_module_destroy(pakchois_module_t *mod)
+{
+    provider_unref(mod->provider);
+
+    while (mod->slots) {
+        struct slot *slot = mod->slots;
+        pakchois_close_all_sessions(mod, slot->id);
+        mod->slots = slot->next;
+        free(slot);
+    }
+
+    /* ### TODO: free all slots */
+    free(mod);
+}
+
+#ifdef __GNUC__
+static void pakchois_destructor(void)
+    __attribute__((destructor));
+
+static void pakchois_destructor(void)
+{
+    pthread_mutex_destroy(&provider_mutex);
+}
+#else
+#warning need destructor support
+#endif
+
+ck_rv_t pakchois_get_info(pakchois_module_t *mod, struct ck_info *info)
 {
     return CALL(GetInfo, (info));
 }
 
-ck_rv_t pakchois_get_slot_list(pakchois_module_t *ctx,
+ck_rv_t pakchois_get_slot_list(pakchois_module_t *mod,
 			       unsigned char token_present,
 			       ck_slot_id_t *slot_list,
 			       unsigned long *count)
@@ -210,28 +333,36 @@ ck_rv_t pakchois_get_slot_list(pakchois_module_t *ctx,
     return CALL(GetSlotList, (token_present, slot_list, count));
 }
 
-ck_rv_t pakchois_get_slot_info(pakchois_module_t *ctx,
+ck_rv_t pakchois_get_slot_info(pakchois_module_t *mod,
 			       ck_slot_id_t slot_id,
 			       struct ck_slot_info *info)
 {
     return CALL(GetSlotInfo, (slot_id, info));
 }
 
-ck_rv_t pakchois_get_token_info(pakchois_module_t *ctx,
+ck_rv_t pakchois_get_token_info(pakchois_module_t *mod,
 				ck_slot_id_t slot_id,
 				struct ck_token_info *info)
 {
     return CALL(GetTokenInfo, (slot_id, info));
 }
 
-ck_rv_t pakchois_wait_for_slot_event(pakchois_module_t *ctx,
+ck_rv_t pakchois_wait_for_slot_event(pakchois_module_t *mod,
 				     ck_flags_t flags, ck_slot_id_t *slot,
 				     void *reserved)
 {
-    return CALL(WaitForSlotEvent, (flags, slot, reserved));
+    ck_rv_t rv;
+
+    if (pthread_mutex_lock(&provider_mutex)) {
+        return CKR_CANT_LOCK;
+    }
+        
+    rv = CALL(WaitForSlotEvent, (flags, slot, reserved));
+    pthread_mutex_unlock(&provider_mutex);
+    return rv;
 }
 
-ck_rv_t pakchois_get_mechanism_list(pakchois_module_t *ctx,
+ck_rv_t pakchois_get_mechanism_list(pakchois_module_t *mod,
 				    ck_slot_id_t slot_id,
 				    ck_mechanism_type_t *mechanism_list,
 				    unsigned long *count)
@@ -239,7 +370,7 @@ ck_rv_t pakchois_get_mechanism_list(pakchois_module_t *ctx,
     return CALL(GetMechanismList, (slot_id, mechanism_list, count));
 }
 
-ck_rv_t pakchois_get_mechanism_info(pakchois_module_t *ctx,
+ck_rv_t pakchois_get_mechanism_info(pakchois_module_t *mod,
 				    ck_slot_id_t slot_id,
 				    ck_mechanism_type_t type,
 				    struct ck_mechanism_info *info)
@@ -247,7 +378,7 @@ ck_rv_t pakchois_get_mechanism_info(pakchois_module_t *ctx,
     return CALL(GetMechanismInfo, (slot_id, type, info));
 }
 
-ck_rv_t pakchois_init_token(pakchois_module_t *ctx,
+ck_rv_t pakchois_init_token(pakchois_module_t *mod,
 			    ck_slot_id_t slot_id, unsigned char *pin,
 			    unsigned long pin_len, unsigned char *label)
 {
@@ -275,21 +406,21 @@ static ck_rv_t notify_thunk(ck_session_handle_t session,
     return sess->notify(sess, event, sess->notify_data);
 }
 
-static struct slot *find_slot(pakchois_module_t *ctx, ck_slot_id_t id)
+static struct slot *find_slot(pakchois_module_t *mod, ck_slot_id_t id)
 {
     struct slot *slot;
 
-    for (slot = ctx->slots; slot; slot = slot->next)
+    for (slot = mod->slots; slot; slot = slot->next)
         if (slot->id == id)
             return slot;
 
     return NULL;
 }
 
-static struct slot *find_or_create_slot(pakchois_module_t *ctx,
+static struct slot *find_or_create_slot(pakchois_module_t *mod,
                                         ck_slot_id_t id)
 {
-    struct slot *slot = find_slot(ctx, id);
+    struct slot *slot = find_slot(mod, id);
 
     if (slot) {
         return slot;
@@ -302,17 +433,17 @@ static struct slot *find_or_create_slot(pakchois_module_t *ctx,
     
     slot->id = id;
     slot->sessions = NULL;
-    slot->next = ctx->slots;
-    ctx->slots = slot;
+    slot->next = mod->slots;
+    mod->slots = slot;
 
     return slot;
 }
 
-static ck_rv_t insert_session(pakchois_module_t *ctx,
+static ck_rv_t insert_session(pakchois_module_t *mod,
                               pakchois_session_t *session,
                               ck_slot_id_t id)
 {
-    struct slot *slot = find_or_create_slot(ctx, id);
+    struct slot *slot = find_or_create_slot(mod, id);
     
     if (!slot) {
         return CKR_HOST_MEMORY;
@@ -328,7 +459,7 @@ static ck_rv_t insert_session(pakchois_module_t *ctx,
     return CKR_OK;
 }
 
-ck_rv_t pakchois_open_session(pakchois_module_t *ctx,
+ck_rv_t pakchois_open_session(pakchois_module_t *mod,
 			      ck_slot_id_t slot_id, ck_flags_t flags,
 			      void *application, pakchois_notify_t notify,
 			      pakchois_session_t **session)
@@ -349,10 +480,10 @@ ck_rv_t pakchois_open_session(pakchois_module_t *ctx,
     }
     
     *session = sess;
-    sess->context = ctx;
+    sess->module = mod;
     sess->id = sh;
 
-    return insert_session(ctx, sess, slot_id);
+    return insert_session(mod, sess, slot_id);
 }
 
 ck_rv_t pakchois_close_session(pakchois_session_t *sess)
@@ -368,25 +499,26 @@ ck_rv_t pakchois_close_session(pakchois_session_t *sess)
     return rv;
 }
 
-ck_rv_t pakchois_close_all_sessions(pakchois_module_t *ctx,
+ck_rv_t pakchois_close_all_sessions(pakchois_module_t *mod,
 				    ck_slot_id_t slot_id)
 {
     struct slot *slot;
-    pakchois_session_t *sess, *next;
+    ck_rv_t rv, frv = CKR_OK;
 
-    ck_rv_t rv = CALL(CloseAllSessions, (slot_id));
+    slot = find_slot(mod, slot_id);
 
-    slot = find_slot(ctx, slot_id);
-
-    if (slot) {
-        for (sess = slot->sessions; sess; sess = next) {
-            next = sess->next;
-            free(sess);
-        }
-        slot->sessions = NULL;
+    if (!slot) {
+        return CKR_SLOT_ID_INVALID;
     }
 
-    return rv;
+    while (slot->sessions) {
+        rv = pakchois_close_session(slot->sessions);
+        if (rv != CKR_OK) {
+            frv = rv;
+        }
+    }
+
+    return frv;
 }
 
 ck_rv_t pakchois_get_session_info(pakchois_session_t *sess,

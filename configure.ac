@@ -1,12 +1,17 @@
 AC_INIT([pakchois], 0.3, [joe@manyfish.co.uk])
 AC_CONFIG_HEADER([config.h])
 AC_CONFIG_SRCDIR([pakchois.c])
-AM_INIT_AUTOMAKE
 
-AC_PROG_LIBTOOL
+AM_INIT_AUTOMAKE
+AM_PROG_LIBTOOL
 
 LINGUAS=""
 AM_GNU_GETTEXT([external], [need-ngettext])
+
+AC_CHECK_LIB(pthread, pthread_mutex_lock,,
+   [AC_MSG_ERROR([could not find pthread_mutex_lock])])
+AC_CHECK_LIB(dl, dlopen,,
+   [AC_MSG_ERROR([could not find dlopen])])
 
 # libtool library version -- CURRENT:REVISION:AGE
 PK_LTVERSINFO=1:0:1
