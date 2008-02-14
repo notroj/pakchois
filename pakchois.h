@@ -111,6 +111,10 @@ const char *pakchois_error(ck_rv_t rv);
    with the given module instance; any sessions opened by other users
    of the underlying provider are unaffected.
 
+   If a module object is used concurrently from separate threads,
+   undefined behaviour results.  If a session object is used
+   concurrently from separate threads, undefined behavioure results.
+
 */
 ck_rv_t pakchois_get_info(pakchois_module_t *module, struct ck_info *info);
 
