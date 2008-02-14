@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: pakchois 0.3\n"
 "Report-Msgid-Bugs-To: joe@manyfish.co.uk\n"
-"POT-Creation-Date: 2008-02-13 20:53+0000\n"
+"POT-Creation-Date: 2008-02-14 16:10+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -16,350 +16,350 @@ msgstr ""
 "Content-Type: text/plain; charset=CHARSET\n"
 "Content-Transfer-Encoding: 8bit\n"
 
-#: pakchois-errors.c:52
+#: errors.c:52
 msgid "Vendor defined error"
 msgstr ""
 
-#: pakchois-errors.c:56
+#: errors.c:56
 msgid "OK"
 msgstr ""
 
-#: pakchois-errors.c:57
+#: errors.c:57
 msgid "Cancel"
 msgstr ""
 
-#: pakchois-errors.c:58
+#: errors.c:58
 msgid "Host memory"
 msgstr ""
 
-#: pakchois-errors.c:59
+#: errors.c:59
 msgid "Slot id invalid"
 msgstr ""
 
-#: pakchois-errors.c:60
+#: errors.c:60
 msgid "General error"
 msgstr ""
 
-#: pakchois-errors.c:61
+#: errors.c:61
 msgid "Function failed"
 msgstr ""
 
-#: pakchois-errors.c:62
+#: errors.c:62
 msgid "Arguments bad"
 msgstr ""
 
-#: pakchois-errors.c:63
+#: errors.c:63
 msgid "No event"
 msgstr ""
 
-#: pakchois-errors.c:64
+#: errors.c:64
 msgid "Need to create threads"
 msgstr ""
 
-#: pakchois-errors.c:65
+#: errors.c:65
 msgid "Can't lock"
 msgstr ""
 
-#: pakchois-errors.c:66
+#: errors.c:66
 msgid "Attribute read only"
 msgstr ""
 
-#: pakchois-errors.c:67
+#: errors.c:67
 msgid "Attribute sensitive"
 msgstr ""
 
-#: pakchois-errors.c:68
+#: errors.c:68
 msgid "Attribute type invalid"
 msgstr ""
 
-#: pakchois-errors.c:69
+#: errors.c:69
 msgid "Attribute value invalid"
 msgstr ""
 
-#: pakchois-errors.c:70
+#: errors.c:70
 msgid "Data invalid"
 msgstr ""
 
-#: pakchois-errors.c:71
+#: errors.c:71
 msgid "Data len range"
 msgstr ""
 
-#: pakchois-errors.c:72
+#: errors.c:72
 msgid "Device error"
 msgstr ""
 
-#: pakchois-errors.c:73
+#: errors.c:73
 msgid "Device memory"
 msgstr ""
 
-#: pakchois-errors.c:74
+#: errors.c:74
 msgid "Device removed"
 msgstr ""
 
-#: pakchois-errors.c:75
+#: errors.c:75
 msgid "Encrypted data invalid"
 msgstr ""
 
-#: pakchois-errors.c:76
+#: errors.c:76
 msgid "Encrypted data len range"
 msgstr ""
 
-#: pakchois-errors.c:77
+#: errors.c:77
 msgid "Function canceled"
 msgstr ""
 
-#: pakchois-errors.c:78
+#: errors.c:78
 msgid "Function not parallel"
 msgstr ""
 
-#: pakchois-errors.c:79
+#: errors.c:79
 msgid "Function not supported"
 msgstr ""
 
-#: pakchois-errors.c:80
+#: errors.c:80
 msgid "Key handle invalid"
 msgstr ""
 
-#: pakchois-errors.c:81
+#: errors.c:81
 msgid "Key size range"
 msgstr ""
 
-#: pakchois-errors.c:82
+#: errors.c:82
 msgid "Key type inconsistent"
 msgstr ""
 
-#: pakchois-errors.c:83
+#: errors.c:83
 msgid "Key not needed"
 msgstr ""
 
-#: pakchois-errors.c:84
+#: errors.c:84
 msgid "Key changed"
 msgstr ""
 
-#: pakchois-errors.c:85
+#: errors.c:85
 msgid "Key needed"
 msgstr ""
 
-#: pakchois-errors.c:86
+#: errors.c:86
 msgid "Key indigestible"
 msgstr ""
 
-#: pakchois-errors.c:87
+#: errors.c:87
 msgid "Key function not permitted"
 msgstr ""
 
-#: pakchois-errors.c:88
+#: errors.c:88
 msgid "Key not wrappable"
 msgstr ""
 
-#: pakchois-errors.c:89
+#: errors.c:89
 msgid "Key unextractable"
 msgstr ""
 
-#: pakchois-errors.c:90
+#: errors.c:90
 msgid "Mechanism invalid"
 msgstr ""
 
-#: pakchois-errors.c:91
+#: errors.c:91
 msgid "Mechanism param invalid"
 msgstr ""
 
-#: pakchois-errors.c:92
+#: errors.c:92
 msgid "Object handle invalid"
 msgstr ""
 
-#: pakchois-errors.c:93
+#: errors.c:93
 msgid "Operation active"
 msgstr ""
 
-#: pakchois-errors.c:94
+#: errors.c:94
 msgid "Operation not initialized"
 msgstr ""
 
-#: pakchois-errors.c:95
+#: errors.c:95
 msgid "PIN incorrect"
 msgstr ""
 
-#: pakchois-errors.c:96
+#: errors.c:96
 msgid "PIN invalid"
 msgstr ""
 
-#: pakchois-errors.c:97
+#: errors.c:97
 msgid "PIN len range"
 msgstr ""
 
-#: pakchois-errors.c:98
+#: errors.c:98
 msgid "PIN expired"
 msgstr ""
 
-#: pakchois-errors.c:99
+#: errors.c:99
 msgid "PIN locked"
 msgstr ""
 
-#: pakchois-errors.c:100
+#: errors.c:100
 msgid "Session closed"
 msgstr ""
 
-#: pakchois-errors.c:101
+#: errors.c:101
 msgid "Session count"
 msgstr ""
 
-#: pakchois-errors.c:102
+#: errors.c:102
 msgid "Session handle invalid"
 msgstr ""
 
-#: pakchois-errors.c:103
+#: errors.c:103
 msgid "Session parallel not supported"
 msgstr ""
 
-#: pakchois-errors.c:104
+#: errors.c:104
 msgid "Session read only"
 msgstr ""
 
-#: pakchois-errors.c:105
+#: errors.c:105
 msgid "Session exists"
 msgstr ""
 
-#: pakchois-errors.c:106
+#: errors.c:106
 msgid "Session read only exists"
 msgstr ""
 
-#: pakchois-errors.c:107
+#: errors.c:107
 msgid "Session read write so exists"
 msgstr ""
 
-#: pakchois-errors.c:108
+#: errors.c:108
 msgid "Signature invalid"
 msgstr ""
 
-#: pakchois-errors.c:109
+#: errors.c:109
 msgid "Signature length range"
 msgstr ""
 
-#: pakchois-errors.c:110
+#: errors.c:110
 msgid "Template incomplete"
 msgstr ""
 
-#: pakchois-errors.c:111
+#: errors.c:111
 msgid "Template inconsistent"
 msgstr ""
 
-#: pakchois-errors.c:112
+#: errors.c:112
 msgid "Token not present"
 msgstr ""
 
-#: pakchois-errors.c:113
+#: errors.c:113
 msgid "Token not recognized"
 msgstr ""
 
-#: pakchois-errors.c:114
+#: errors.c:114
 msgid "Token write protected"
 msgstr ""
 
-#: pakchois-errors.c:115
+#: errors.c:115
 msgid "Unwrapping key handle invalid"
 msgstr ""
 
-#: pakchois-errors.c:116
+#: errors.c:116
 msgid "Unwrapping key size range"
 msgstr ""
 
-#: pakchois-errors.c:117
+#: errors.c:117
 msgid "Unwrapping key type inconsistent"
 msgstr ""
 
-#: pakchois-errors.c:118
+#: errors.c:118
 msgid "User already logged in"
 msgstr ""
 
-#: pakchois-errors.c:119
+#: errors.c:119
 msgid "User not logged in"
 msgstr ""
 
-#: pakchois-errors.c:120
+#: errors.c:120
 msgid "User PIN not initialized"
 msgstr ""
 
-#: pakchois-errors.c:121
+#: errors.c:121
 msgid "User type invalid"
 msgstr ""
 
-#: pakchois-errors.c:122
+#: errors.c:122
 msgid "Another user already logged in"
 msgstr ""
 
-#: pakchois-errors.c:123
+#: errors.c:123
 msgid "User too many types"
 msgstr ""
 
-#: pakchois-errors.c:124
+#: errors.c:124
 msgid "Wrapped key invalid"
 msgstr ""
 
-#: pakchois-errors.c:125
+#: errors.c:125
 msgid "Wrapped key length range"
 msgstr ""
 
-#: pakchois-errors.c:126
+#: errors.c:126
 msgid "Wrapping key handle invalid"
 msgstr ""
 
-#: pakchois-errors.c:127
+#: errors.c:127
 msgid "Wrapping key size range"
 msgstr ""
 
-#: pakchois-errors.c:128
+#: errors.c:128
 msgid "Wrapping key type inconsistent"
 msgstr ""
 
-#: pakchois-errors.c:129
+#: errors.c:129
 msgid "Random seed not supported"
 msgstr ""
 
-#: pakchois-errors.c:130
+#: errors.c:130
 msgid "Random no rng"
 msgstr ""
 
-#: pakchois-errors.c:131
+#: errors.c:131
 msgid "Domain params invalid"
 msgstr ""
 
-#: pakchois-errors.c:132
+#: errors.c:132
 msgid "Buffer too small"
 msgstr ""
 
-#: pakchois-errors.c:133
+#: errors.c:133
 msgid "Saved state invalid"
 msgstr ""
 
-#: pakchois-errors.c:134
+#: errors.c:134
 msgid "Information sensitive"
 msgstr ""
 
-#: pakchois-errors.c:135
+#: errors.c:135
 msgid "State unsaveable"
 msgstr ""
 
-#: pakchois-errors.c:136
+#: errors.c:136
 msgid "Cryptoki not initialized"
 msgstr ""
 
-#: pakchois-errors.c:137
+#: errors.c:137
 msgid "Cryptoki already initialized"
 msgstr ""
 
-#: pakchois-errors.c:138
+#: errors.c:138
 msgid "Mutex bad"
 msgstr ""
 
-#: pakchois-errors.c:139
+#: errors.c:139
 msgid "Mutex not locked"
 msgstr ""
 
-#: pakchois-errors.c:140
+#: errors.c:140
 msgid "Function rejected"
 msgstr ""
 
-#: pakchois-errors.c:145
+#: errors.c:145
 msgid "Unknown error"
 msgstr ""
