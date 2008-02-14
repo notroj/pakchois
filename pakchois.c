@@ -276,6 +276,8 @@ ck_rv_t pakchois_module_nssload(pakchois_module_t **module,
     return load_module(module, name, buf);
 }
 
+/* Unreference a provider structure and destoy if, if necessary.  Must
+ * be called WIHTOUT the provider mutex held.  */
 static void provider_unref(struct provider *prov)
 {
     assert(pthread_mutex_lock(&provider_mutex) == 0);
@@ -304,7 +306,6 @@ void pakchois_module_destroy(pakchois_module_t *mod)
         free(slot);
     }
 
-    /* ### TODO: free all slots */
     free(mod);
 }
 
