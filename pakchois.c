@@ -240,20 +240,22 @@ fail_locked:
     return rv;
 }    
 
-ck_rv_t load_module(pakchois_module_t **module, const char *name, 
-                    void *reserved)
+static ck_rv_t load_module(pakchois_module_t **module, const char *name, 
+                           void *reserved)
 {
     ck_rv_t rv;
-    struct provider *provider;
-    pakchois_module_t *pm;
+    pakchois_module_t *pm = malloc(sizeof *pm);
 
-    rv = load_provider(&provider, name, reserved);
+    if (!pm) {
+        return CKR_HOST_MEMORY;
+    }
+
+    rv = load_provider(&pm->provider, name, reserved);
     if (rv) {
         return rv;
     }
     
-    *module = pm = malloc(sizeof *pm);
-    pm->provider = provider;
+    *module = pm;    
     pm->slots = NULL;
 
     return CKR_OK;
