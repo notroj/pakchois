@@ -3,7 +3,7 @@ exec_prefix=@exec_prefix@
 libdir=@libdir@
 includedir=@includedir@
 
-Name: neon
+Name: pakchois
 Description: pakchois PKCS#11 wrapper interface
 Version: @PACKAGE_VERSION@
 Libs.private: @LIBS@
