@@ -50,6 +50,7 @@
 struct provider {
     char *name;
     void *handle;
+    pthread_mutex_t mutex;
     const struct ck_function_list *fns;
     unsigned int refcount;
     struct provider *next, **prevref;
@@ -197,6 +198,11 @@ static ck_rv_t load_provider(struct provider **provider, const char *name,
         goto fail_ndup;
     }
     
+    if (pthread_mutex_init(&prov->mutex, NULL)) {
+        rv = CKR_GENERAL_ERROR;
+        goto fail_ctx;
+    }
+
     prov->name = cname;
     prov->handle = h;
     prov->fns = fns;
@@ -354,12 +360,12 @@ ck_rv_t pakchois_wait_for_slot_event(pakchois_module_t *mod,
 {
     ck_rv_t rv;
 
-    if (pthread_mutex_lock(&provider_mutex)) {
+    if (pthread_mutex_lock(&mod->provider->mutex)) {
         return CKR_CANT_LOCK;
     }
         
     rv = CALL(WaitForSlotEvent, (flags, slot, reserved));
-    pthread_mutex_unlock(&provider_mutex);
+    pthread_mutex_unlock(&mod->provider->mutex);
     return rv;
 }
 
