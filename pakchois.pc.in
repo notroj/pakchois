@@ -6,6 +6,6 @@ includedir=@includedir@
 Name: neon
 Description: pakchois PKCS#11 wrapper interface
 Version: @PACKAGE_VERSION@
-Libs.private: -ldl
+Libs.private: @LIBS@
 Libs: -L${libdir} -lpakchois
 Cflags: -I${includedir}/pakchois
