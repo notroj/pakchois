@@ -1,4 +1,4 @@
-AC_INIT([pakchois], 0.3, [joe@manyfish.co.uk])
+AC_INIT([pakchois], 0.4, [joe@manyfish.co.uk])
 AC_CONFIG_HEADER([config.h])
 AC_CONFIG_SRCDIR([pakchois.c])
 
