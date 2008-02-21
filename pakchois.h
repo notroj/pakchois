@@ -49,7 +49,9 @@
 #define PAKCHOIS_API_MAJOR (0)
 #define PAKCHOIS_API_MINOR (2)
 
-/* API history:
+/* API version history (note that API versions do not map directly to
+   the project version!):
+
    0.1: Initial release
    0.2: Addition of pakchois_error()
         Concurrent access guarantee added for pakchois_module_load()
