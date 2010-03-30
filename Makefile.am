@@ -13,3 +13,5 @@ test_SOURCES = test.c
 test_LDADD = libpakchois.la
 
 SUBDIRS = po
+
+EXTRA_DIST = COPYING
