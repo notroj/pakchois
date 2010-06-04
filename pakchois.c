@@ -1,6 +1,6 @@
 /* 
    pakchois PKCS#11 interface
-   Copyright (C) 2008, Joe Orton <joe@manyfish.co.uk>
+   Copyright (C) 2008, 2010, Joe Orton <joe@manyfish.co.uk>
 
    This library is free software; you can redistribute it and/or
    modify it under the terms of the GNU Library General Public
@@ -288,7 +288,11 @@ ck_rv_t pakchois_module_nssload(pakchois_module_t **module,
  * be called WIHTOUT the provider mutex held.  */
 static void provider_unref(struct provider *prov)
 {
-    assert(pthread_mutex_lock(&provider_mutex) == 0);
+    /* Not sure whether to fail silently or abort() here... either
+     * choice equally ugly. */
+    if (pthread_mutex_lock(&provider_mutex)) {
+        abort();
+    }
 
     if (--prov->refcount == 0) {
         prov->fns->C_Finalize(NULL);
