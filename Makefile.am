@@ -14,4 +14,5 @@ test_LDADD = libpakchois.la
 
 SUBDIRS = po
 
-EXTRA_DIST = COPYING
+EXTRA_DIST = COPYING COPYING.P11
+
