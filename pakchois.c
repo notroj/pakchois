@@ -252,6 +252,7 @@ static ck_rv_t load_module(pakchois_module_t **module, const char *name,
 
     rv = load_provider(&pm->provider, name, reserved);
     if (rv) {
+        free(pm);
         return rv;
     }
     
